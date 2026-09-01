@@ -19,26 +19,22 @@
     h1 { font-size: 1.5rem; margin-bottom: 15px; }
     
     .controls { display: flex; gap: 10px; justify-content: center; margin-bottom: 15px; width: 100%; }
-    select, button { background: var(--card-bg); color: var(--text); border: 1px solid #334155; padding: 10px 16px; border-radius: 8px; font-size: 0.95rem; cursor: pointer; width: 100%; }
+    select { background: var(--card-bg); color: var(--text); border: 1px solid #334155; padding: 10px; border-radius: 8px; font-size: 0.95rem; cursor: pointer; flex: 1; }
     
-    .card-container { width: 100%; max-width: 360px; height: 480px; perspective: 1000px; margin-bottom: 20px; cursor: pointer; }
-    .card { width: 100%; height: 100%; position: relative; transform-style: preserve-3d; transition: transform 0.4s; border-radius: 16px; }
-    .card.flipped { transform: rotateY(180deg); }
+    .card-container { width: 100%; max-width: 360px; height: 460px; position: relative; margin-bottom: 20px; cursor: pointer; border-radius: 16px; overflow: hidden; background: var(--card-bg); border: 1px solid #334155; }
+    .card-img { width: 100%; height: 100%; object-fit: cover; display: block; }
     
-    .card-face { position: absolute; width: 100%; height: 100%; backface-visibility: hidden; border-radius: 16px; background: var(--card-bg); border: 1px solid #334155; display: flex; flex-direction: column; align-items: center; justify-content: center; overflow: hidden; padding: 16px; text-align: center; }
-    .card-front img { width: 100%; height: 100%; object-fit: cover; border-radius: 10px; }
-    .card-back { transform: rotateY(180deg); justify-content: center; }
+    .overlay { position: absolute; bottom: 0; left: 0; right: 0; background: linear-gradient(transparent, rgba(15, 23, 42, 0.95) 40%); padding: 30px 16px 20px 16px; text-align: center; display: none; }
+    .overlay.visible { display: block; }
     
-    .preferred-name { font-size: 1.8rem; font-weight: bold; color: var(--text); margin-bottom: 6px; }
-    .formal-name { font-size: 1rem; color: var(--text-muted); margin-bottom: 15px; font-style: italic; }
-    .group-tag { font-size: 0.85rem; background: #334155; padding: 4px 12px; border-radius: 12px; color: var(--accent); }
+    .preferred-name { font-size: 1.8rem; font-weight: bold; color: var(--text); margin-bottom: 4px; }
+    .formal-name { font-size: 1rem; color: var(--text-muted); font-style: italic; }
     
-    .nav-btns { display: flex; gap: 12px; width: 100%; max-width: 360px; }
-    .nav-btns button { background: var(--accent); color: #000; font-weight: bold; border: none; padding: 12px; }
+    .nav-btns { display: flex; gap: 10px; width: 100%; max-width: 360px; margin-bottom: 10px; }
+    .nav-btns button { background: var(--accent); color: #000; font-weight: bold; border: none; padding: 12px; border-radius: 8px; font-size: 0.95rem; cursor: pointer; flex: 1; }
     .nav-btns button:hover { opacity: 0.9; }
     
-    .status { font-size: 0.85rem; color: var(--text-muted); margin-top: 15px; }
-    .hidden { display: none; }
+    .status { font-size: 0.85rem; color: var(--text-muted); margin-top: 5px; text-align: center; }
   </style>
 </head>
 <body>
@@ -46,78 +42,65 @@
 <header>
   <h1>Student Flashcards</h1>
   <div class="controls">
-    <select id="groupSelect" onchange="loadGroupStudents()">
-      <option value="">Loading groups...</option>
+    <select id="groupSelect" onchange="startSession()"></select>
+    <select id="batchSizeSelect" onchange="startSession()">
+      <option value="5">Batches of 5</option>
+      <option value="8">Batches of 8</option>
+      <option value="all">Full Class</option>
     </select>
   </div>
 </header>
 
-<div class="card-container" onclick="flipCard()">
-  <div class="card" id="card">
-    <div class="card-face card-front">
-      <img id="studentImg" src="" alt="Student Photo" onerror="this.onerror=null; this.alt='Select a group to start';" />
-    </div>
-    <div class="card-face card-back">
-      <div class="preferred-name" id="prefName">---</div>
-      <div class="formal-name" id="formalName"></div>
-      <div class="group-tag" id="groupTag">---</div>
-    </div>
+<div class="card-container" onclick="handleCardClick()">
+  <img id="studentImg" class="card-img" src="" alt="Student Photo" onerror="this.onerror=null; this.alt='Select a group to start';" />
+  <div class="overlay" id="nameOverlay">
+    <div class="preferred-name" id="prefName">---</div>
+    <div class="formal-name" id="formalName"></div>
   </div>
 </div>
 
 <div class="nav-btns">
-  <button onclick="nextCard()">Next Card</button>
+  <button onclick="prevBatch()">Previous Batch</button>
+  <button onclick="nextBatch()">Next Batch</button>
 </div>
 
-<div class="status" id="statusText">Fetching folders from GitHub...</div>
+<div class="status" id="statusText">Fetching folders...</div>
 
 <script>
   const REPO_OWNER = 'julianhamm';
   const REPO_NAME = 'student-flashcards';
   
-  let groupsData = {};
-  let currentGroup = '';
-  let activeStudents = [];
-  let currentIndex = 0;
+  let rawStudents = [];
+  let batches = [];
+  let currentBatchIdx = 0;
+  let currentCardIdx = 0;
+  let isRevealed = false;
 
-  // Name Parser Logic
   function parseFilename(filename) {
-    let clean = filename.replace(/\.[^/.]+$/, ""); // Remove extension (.jpg)
-    let match = clean.match(/^(.*?)\s*\((.*?)\)$/); // Look for "Full Name (Preferred)"
+    let clean = filename.replace(/\.[^/.]+$/, "");
+    let match = clean.match(/^(.*?)\s*\((.*?)\)$/);
     
     if (match) {
       let fullName = match[1].trim();
       let prefName = match[2].trim();
-      
-      // If full name is "Henry Wilkinson" and pref is "Bear" -> "Bear Wilkinson"
       let nameParts = fullName.split(" ");
       let lastName = nameParts.length > 1 ? nameParts[nameParts.length - 1] : "";
-      let primaryDisplay = `${prefName} ${lastName}`.trim();
-      
-      return {
-        preferred: primaryDisplay,
-        formal: fullName
-      };
+      return { preferred: `${prefName} ${lastName}`.trim(), formal: fullName };
     } else {
-      return {
-        preferred: clean,
-        formal: ""
-      };
+      return { preferred: clean, formal: "" };
     }
   }
 
-  // Fetch folders inside photos/
   async function init() {
     try {
       let res = await fetch(`https://api.github.com/repos/${REPO_OWNER}/${REPO_NAME}/contents/photos`);
       let items = await res.json();
-      
       let folders = items.filter(item => item.type === 'dir');
       let select = document.getElementById('groupSelect');
       select.innerHTML = '';
 
       if (folders.length === 0) {
-        document.getElementById('statusText').innerText = 'No folders found inside photos/';
+        document.getElementById('statusText').innerText = 'No folders found in photos/';
         return;
       }
 
@@ -125,69 +108,115 @@
         select.innerHTML += `<option value="${folder.name}">${folder.name}</option>`;
       }
 
-      currentGroup = folders[0].name;
-      loadGroupStudents();
+      startSession();
     } catch (err) {
-      document.getElementById('statusText').innerText = 'Error loading folders from GitHub API.';
+      document.getElementById('statusText').innerText = 'Error connecting to GitHub.';
       console.error(err);
     }
   }
 
-  // Fetch images inside selected group folder
-  async function loadGroupStudents() {
-    currentGroup = document.getElementById('groupSelect').value;
-    document.getElementById('statusText').innerText = `Loading photos for ${currentGroup}...`;
+  async function startSession() {
+    let group = document.getElementById('groupSelect').value;
+    if (!group) return;
+
+    document.getElementById('statusText').innerText = `Loading ${group}...`;
     
     try {
-      let res = await fetch(`https://api.github.com/repos/${REPO_OWNER}/${REPO_NAME}/contents/photos/${encodeURIComponent(currentGroup)}`);
+      let res = await fetch(`https://api.github.com/repos/${REPO_OWNER}/${REPO_NAME}/contents/photos/${encodeURIComponent(group)}`);
       let files = await res.json();
-      
       let imageFiles = files.filter(f => f.name.match(/\.(jpg|jpeg|png)$/i));
       
-      activeStudents = imageFiles.map(f => {
+      rawStudents = imageFiles.map(f => {
         let names = parseFilename(f.name);
-        return {
-          filename: f.name,
-          path: f.path,
-          preferred: names.preferred,
-          formal: names.formal
-        };
+        return { path: f.path, preferred: names.preferred, formal: names.formal };
       });
 
-      // Shuffle group order
-      shuffle(activeStudents);
-      currentIndex = 0;
+      shuffle(rawStudents);
+      createBatches();
+      
+      currentBatchIdx = 0;
+      currentCardIdx = 0;
       renderCard();
     } catch (err) {
-      document.getElementById('statusText').innerText = 'Error loading images.';
+      document.getElementById('statusText').innerText = 'Error loading set photos.';
       console.error(err);
+    }
+  }
+
+  function createBatches() {
+    batches = [];
+    let sizeOpt = document.getElementById('batchSizeSelect').value;
+    
+    if (sizeOpt === 'all' || rawStudents.length <= parseInt(sizeOpt)) {
+      batches.push([...rawStudents]);
+      return;
+    }
+
+    let bSize = parseInt(sizeOpt);
+    let total = rawStudents.length;
+    let fullBatches = Math.floor(total / bSize);
+    let remainder = total % bSize;
+
+    for (let i = 0; i < fullBatches; i++) {
+      batches.push(rawStudents.slice(i * bSize, (i + 1) * bSize));
+    }
+
+    // Option C Overlap Logic for remainders
+    if (remainder > 0) {
+      let lastChunk = rawStudents.slice(fullBatches * bSize);
+      let needed = bSize - remainder;
+      let pool = rawStudents.slice(0, fullBatches * bSize);
+      shuffle(pool);
+      let paddedBatch = [...lastChunk, ...pool.slice(0, needed)];
+      batches.push(paddedBatch);
     }
   }
 
   function renderCard() {
-    if (activeStudents.length === 0) {
-      document.getElementById('statusText').innerText = 'No images found in this group.';
-      return;
-    }
+    isRevealed = false;
+    document.getElementById('nameOverlay').classList.remove('visible');
 
-    let student = activeStudents[currentIndex];
-    document.getElementById('card').classList.remove('flipped');
-    
-    document.getElementById('studentImg').src = `${student.path}`;
+    let currentBatch = batches[currentBatchIdx];
+    if (!currentBatch || currentBatch.length === 0) return;
+
+    let student = currentBatch[currentCardIdx];
+    document.getElementById('studentImg').src = student.path;
     document.getElementById('prefName').innerText = student.preferred;
     document.getElementById('formalName').innerText = student.formal ? `(${student.formal})` : '';
-    document.getElementById('groupTag').innerText = currentGroup;
-    
-    document.getElementById('statusText').innerText = `Card ${currentIndex + 1} of ${activeStudents.length} (${currentGroup})`;
+
+    let group = document.getElementById('groupSelect').value;
+    document.getElementById('statusText').innerText = 
+      `Card ${currentCardIdx + 1} of ${currentBatch.length}  |  Batch ${currentBatchIdx + 1} of ${batches.length} (${group})`;
   }
 
-  function flipCard() {
-    document.getElementById('card').classList.toggle('flipped');
+  function handleCardClick() {
+    if (!isRevealed) {
+      // First click: Reveal Overlay
+      document.getElementById('nameOverlay').classList.add('visible');
+      isRevealed = true;
+    } else {
+      // Second click: Advance Card
+      nextCard();
+    }
   }
 
   function nextCard() {
-    if (activeStudents.length === 0) return;
-    currentIndex = (currentIndex + 1) % activeStudents.length;
+    let currentBatch = batches[currentBatchIdx];
+    currentCardIdx = (currentCardIdx + 1) % currentBatch.length;
+    renderCard();
+  }
+
+  function nextBatch() {
+    if (batches.length === 0) return;
+    currentBatchIdx = (currentBatchIdx + 1) % batches.length;
+    currentCardIdx = 0;
+    renderCard();
+  }
+
+  function prevBatch() {
+    if (batches.length === 0) return;
+    currentBatchIdx = (currentBatchIdx - 1 + batches.length) % batches.length;
+    currentCardIdx = 0;
     renderCard();
   }
 
