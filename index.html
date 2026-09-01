@@ -2,50 +2,203 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <title>Student Flashcards - Single Image Test</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Student Name Flashcards</title>
   <style>
-    body {
-      font-family: system-ui, sans-serif;
-      background: #0f172a;
-      color: #f8fafc;
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      padding: 40px;
+    :root {
+      --bg: #0f172a;
+      --card-bg: #1e293b;
+      --accent: #38bdf8;
+      --text: #f8fafc;
+      --text-muted: #94a3b8;
     }
-    .card {
-      background: #1e293b;
-      border: 1px solid #334155;
-      border-radius: 12px;
-      padding: 20px;
-      text-align: center;
-      max-width: 300px;
-    }
-    img {
-      width: 100%;
-      height: 350px;
-      object-fit: cover;
-      border-radius: 8px;
-    }
-    h2 {
-      margin-top: 15px;
-      font-size: 1.4rem;
-    }
-    p {
-      color: #94a3b8;
-      font-size: 0.9rem;
-    }
+    * { box-sizing: border-box; margin: 0; padding: 0; font-family: system-ui, -apple-system, sans-serif; }
+    body { background: var(--bg); color: var(--text); display: flex; flex-direction: column; align-items: center; min-height: 100vh; padding: 20px; }
+    
+    header { text-align: center; margin-bottom: 20px; width: 100%; max-width: 400px; }
+    h1 { font-size: 1.5rem; margin-bottom: 15px; }
+    
+    .controls { display: flex; gap: 10px; justify-content: center; margin-bottom: 15px; width: 100%; }
+    select, button { background: var(--card-bg); color: var(--text); border: 1px solid #334155; padding: 10px 16px; border-radius: 8px; font-size: 0.95rem; cursor: pointer; width: 100%; }
+    
+    .card-container { width: 100%; max-width: 360px; height: 480px; perspective: 1000px; margin-bottom: 20px; cursor: pointer; }
+    .card { width: 100%; height: 100%; position: relative; transform-style: preserve-3d; transition: transform 0.4s; border-radius: 16px; }
+    .card.flipped { transform: rotateY(180deg); }
+    
+    .card-face { position: absolute; width: 100%; height: 100%; backface-visibility: hidden; border-radius: 16px; background: var(--card-bg); border: 1px solid #334155; display: flex; flex-direction: column; align-items: center; justify-content: center; overflow: hidden; padding: 16px; text-align: center; }
+    .card-front img { width: 100%; height: 100%; object-fit: cover; border-radius: 10px; }
+    .card-back { transform: rotateY(180deg); justify-content: center; }
+    
+    .preferred-name { font-size: 1.8rem; font-weight: bold; color: var(--text); margin-bottom: 6px; }
+    .formal-name { font-size: 1rem; color: var(--text-muted); margin-bottom: 15px; font-style: italic; }
+    .group-tag { font-size: 0.85rem; background: #334155; padding: 4px 12px; border-radius: 12px; color: var(--accent); }
+    
+    .nav-btns { display: flex; gap: 12px; width: 100%; max-width: 360px; }
+    .nav-btns button { background: var(--accent); color: #000; font-weight: bold; border: none; padding: 12px; }
+    .nav-btns button:hover { opacity: 0.9; }
+    
+    .status { font-size: 0.85rem; color: var(--text-muted); margin-top: 15px; }
+    .hidden { display: none; }
   </style>
 </head>
 <body>
 
-  <h1>Path Test</h1>
-
-  <div class="card">
-    <img src="photos/4S2/Aurian Graves.jpg" alt="Student Photo" onerror="this.onerror=null; this.alt='Image not found! Check path or filename.';" />
-    <h2>Aurian Graves</h2>
-    <p>Group: 4S2</p>
+<header>
+  <h1>Student Flashcards</h1>
+  <div class="controls">
+    <select id="groupSelect" onchange="loadGroupStudents()">
+      <option value="">Loading groups...</option>
+    </select>
   </div>
+</header>
 
+<div class="card-container" onclick="flipCard()">
+  <div class="card" id="card">
+    <div class="card-face card-front">
+      <img id="studentImg" src="" alt="Student Photo" onerror="this.onerror=null; this.alt='Select a group to start';" />
+    </div>
+    <div class="card-face card-back">
+      <div class="preferred-name" id="prefName">---</div>
+      <div class="formal-name" id="formalName"></div>
+      <div class="group-tag" id="groupTag">---</div>
+    </div>
+  </div>
+</div>
+
+<div class="nav-btns">
+  <button onclick="nextCard()">Next Card</button>
+</div>
+
+<div class="status" id="statusText">Fetching folders from GitHub...</div>
+
+<script>
+  const REPO_OWNER = 'julianhamm';
+  const REPO_NAME = 'student-flashcards';
+  
+  let groupsData = {};
+  let currentGroup = '';
+  let activeStudents = [];
+  let currentIndex = 0;
+
+  // Name Parser Logic
+  function parseFilename(filename) {
+    let clean = filename.replace(/\.[^/.]+$/, ""); // Remove extension (.jpg)
+    let match = clean.match(/^(.*?)\s*\((.*?)\)$/); // Look for "Full Name (Preferred)"
+    
+    if (match) {
+      let fullName = match[1].trim();
+      let prefName = match[2].trim();
+      
+      // If full name is "Henry Wilkinson" and pref is "Bear" -> "Bear Wilkinson"
+      let nameParts = fullName.split(" ");
+      let lastName = nameParts.length > 1 ? nameParts[nameParts.length - 1] : "";
+      let primaryDisplay = `${prefName} ${lastName}`.trim();
+      
+      return {
+        preferred: primaryDisplay,
+        formal: fullName
+      };
+    } else {
+      return {
+        preferred: clean,
+        formal: ""
+      };
+    }
+  }
+
+  // Fetch folders inside photos/
+  async function init() {
+    try {
+      let res = await fetch(`https://api.github.com/repos/${REPO_OWNER}/${REPO_NAME}/contents/photos`);
+      let items = await res.json();
+      
+      let folders = items.filter(item => item.type === 'dir');
+      let select = document.getElementById('groupSelect');
+      select.innerHTML = '';
+
+      if (folders.length === 0) {
+        document.getElementById('statusText').innerText = 'No folders found inside photos/';
+        return;
+      }
+
+      for (let folder of folders) {
+        select.innerHTML += `<option value="${folder.name}">${folder.name}</option>`;
+      }
+
+      currentGroup = folders[0].name;
+      loadGroupStudents();
+    } catch (err) {
+      document.getElementById('statusText').innerText = 'Error loading folders from GitHub API.';
+      console.error(err);
+    }
+  }
+
+  // Fetch images inside selected group folder
+  async function loadGroupStudents() {
+    currentGroup = document.getElementById('groupSelect').value;
+    document.getElementById('statusText').innerText = `Loading photos for ${currentGroup}...`;
+    
+    try {
+      let res = await fetch(`https://api.github.com/repos/${REPO_OWNER}/${REPO_NAME}/contents/photos/${encodeURIComponent(currentGroup)}`);
+      let files = await res.json();
+      
+      let imageFiles = files.filter(f => f.name.match(/\.(jpg|jpeg|png)$/i));
+      
+      activeStudents = imageFiles.map(f => {
+        let names = parseFilename(f.name);
+        return {
+          filename: f.name,
+          path: f.path,
+          preferred: names.preferred,
+          formal: names.formal
+        };
+      });
+
+      // Shuffle group order
+      shuffle(activeStudents);
+      currentIndex = 0;
+      renderCard();
+    } catch (err) {
+      document.getElementById('statusText').innerText = 'Error loading images.';
+      console.error(err);
+    }
+  }
+
+  function renderCard() {
+    if (activeStudents.length === 0) {
+      document.getElementById('statusText').innerText = 'No images found in this group.';
+      return;
+    }
+
+    let student = activeStudents[currentIndex];
+    document.getElementById('card').classList.remove('flipped');
+    
+    document.getElementById('studentImg').src = `${student.path}`;
+    document.getElementById('prefName').innerText = student.preferred;
+    document.getElementById('formalName').innerText = student.formal ? `(${student.formal})` : '';
+    document.getElementById('groupTag').innerText = currentGroup;
+    
+    document.getElementById('statusText').innerText = `Card ${currentIndex + 1} of ${activeStudents.length} (${currentGroup})`;
+  }
+
+  function flipCard() {
+    document.getElementById('card').classList.toggle('flipped');
+  }
+
+  function nextCard() {
+    if (activeStudents.length === 0) return;
+    currentIndex = (currentIndex + 1) % activeStudents.length;
+    renderCard();
+  }
+
+  function shuffle(arr) {
+    for (let i = arr.length - 1; i > 0; i--) {
+      let j = Math.floor(Math.random() * (i + 1));
+      [arr[i], arr[j]] = [arr[j], arr[i]];
+    }
+  }
+
+  window.onload = init;
+</script>
 </body>
 </html>
