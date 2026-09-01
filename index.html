@@ -2,12 +2,50 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <title>Student Flashcards</title>
+  <title>Student Flashcards - Single Image Test</title>
+  <style>
+    body {
+      font-family: system-ui, sans-serif;
+      background: #0f172a;
+      color: #f8fafc;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 40px;
+    }
+    .card {
+      background: #1e293b;
+      border: 1px solid #334155;
+      border-radius: 12px;
+      padding: 20px;
+      text-align: center;
+      max-width: 300px;
+    }
+    img {
+      width: 100%;
+      height: 350px;
+      object-fit: cover;
+      border-radius: 8px;
+    }
+    h2 {
+      margin-top: 15px;
+      font-size: 1.4rem;
+    }
+    p {
+      color: #94a3b8;
+      font-size: 0.9rem;
+    }
+  </style>
 </head>
 <body>
 
-  <h1>Hello World!</h1>
-  <p>The student flashcard app will live here soon.</p>
+  <h1>Path Test</h1>
+
+  <div class="card">
+    <img src="photos/4S2/Aurian Graves.jpg" alt="Student Photo" onerror="this.onerror=null; this.alt='Image not found! Check path or filename.';" />
+    <h2>Aurian Graves</h2>
+    <p>Group: 4S2</p>
+  </div>
 
 </body>
 </html>
