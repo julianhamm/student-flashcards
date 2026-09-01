@@ -119,6 +119,9 @@
     let group = document.getElementById('groupSelect').value;
     if (!group) return;
 
+    // Full global reset
+    isRevealed = false;
+    document.getElementById('nameOverlay').classList.remove('visible');
     document.getElementById('statusText').innerText = `Loading ${group}...`;
     
     try {
@@ -172,7 +175,6 @@
   }
 
   function renderCard() {
-    // Reset reveal status and hide overlay cleanly on every card change
     isRevealed = false;
     document.getElementById('nameOverlay').classList.remove('visible');
 
@@ -200,7 +202,14 @@
 
   function nextCard() {
     let currentBatch = batches[currentBatchIdx];
-    currentCardIdx = (currentCardIdx + 1) % currentBatch.length;
+    currentCardIdx++;
+    
+    // When completing a full loop of the batch, reshuffle it before starting over
+    if (currentCardIdx >= currentBatch.length) {
+      currentCardIdx = 0;
+      shuffle(currentBatch);
+    }
+    
     renderCard();
   }
 
