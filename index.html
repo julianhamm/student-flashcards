@@ -161,7 +161,6 @@
       batches.push(rawStudents.slice(i * bSize, (i + 1) * bSize));
     }
 
-    // Option C Overlap Logic for remainders
     if (remainder > 0) {
       let lastChunk = rawStudents.slice(fullBatches * bSize);
       let needed = bSize - remainder;
@@ -173,6 +172,7 @@
   }
 
   function renderCard() {
+    // Reset reveal status and hide overlay cleanly on every card change
     isRevealed = false;
     document.getElementById('nameOverlay').classList.remove('visible');
 
@@ -191,11 +191,9 @@
 
   function handleCardClick() {
     if (!isRevealed) {
-      // First click: Reveal Overlay
       document.getElementById('nameOverlay').classList.add('visible');
       isRevealed = true;
     } else {
-      // Second click: Advance Card
       nextCard();
     }
   }
