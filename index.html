@@ -47,11 +47,32 @@
     .status { font-size: 0.85rem; color: var(--text-muted); margin-top: 5px; text-align: center; }
 
     /* Grid View Styles */
-    .grid-container { width: 100%; max-width: 360px; height: 460px; display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; overflow-y: auto; margin-bottom: 20px; padding-right: 4px; }
+    .grid-container { 
+      width: 100%; 
+      max-width: 360px; 
+      height: 460px; 
+      display: grid; 
+      grid-template-columns: repeat(2, 1fr); 
+      grid-auto-rows: max-content;
+      align-items: start;
+      gap: 12px; 
+      overflow-y: auto; 
+      margin-bottom: 20px; 
+      padding-right: 4px; 
+    }
     .grid-container.hidden { display: none !important; }
     
     /* Scaled-down replica card design */
-    .grid-card { position: relative; width: 100%; aspect-ratio: 360 / 460; border-radius: 12px; overflow: hidden; background: var(--card-bg); border: 1px solid #334155; }
+    .grid-card { 
+      position: relative; 
+      width: 100%; 
+      min-height: 0;
+      aspect-ratio: 360 / 460; 
+      border-radius: 12px; 
+      overflow: hidden; 
+      background: var(--card-bg); 
+      border: 1px solid #334155; 
+    }
     .grid-card img { width: 100%; height: 100%; object-fit: cover; display: block; }
     .grid-overlay { position: absolute; bottom: 0; left: 0; right: 0; background: linear-gradient(transparent, rgba(15, 23, 42, 0.95) 40%); padding: 20px 8px 10px 8px; text-align: center; z-index: 5; }
     .grid-pref-name { font-size: 0.95rem; font-weight: bold; color: var(--text); margin-bottom: 2px; line-height: 1.1; }
