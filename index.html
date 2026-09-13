@@ -44,6 +44,14 @@
     .nav-btns button:hover { opacity: 0.9; }
     
     .status { font-size: 0.85rem; color: var(--text-muted); margin-top: 5px; text-align: center; }
+
+    /* Grid View Styles */
+    .grid-container { width: 100%; max-width: 360px; height: 460px; display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; overflow-y: auto; margin-bottom: 20px; padding: 4px; }
+    .grid-container.hidden { display: none; }
+    .grid-card { background: var(--card-bg); border: 1px solid #334155; border-radius: 12px; overflow: hidden; display: flex; flex-direction: column; align-items: center; text-align: center; padding-bottom: 8px; }
+    .grid-card img { width: 100%; aspect-ratio: 1 / 1; object-fit: cover; border-bottom: 1px solid #334155; margin-bottom: 6px; }
+    .grid-pref-name { font-size: 0.9rem; font-weight: bold; color: var(--text); padding: 0 4px; line-height: 1.2; }
+    .grid-formal-name { font-size: 0.75rem; color: var(--text-muted); font-style: italic; padding: 2px 4px 0 4px; line-height: 1.1; }
   </style>
 </head>
 <body>
@@ -51,16 +59,18 @@
 <header>
   <h1>Student Flashcards</h1>
   <div class="controls">
-    <select id="groupSelect" onchange="startSession()"></select>
-    <select id="batchSizeSelect" onchange="startSession()">
+    <select id="groupSelect" onchange="handleGroupChange()"></select>
+    <select id="batchSizeSelect" onchange="handleModeChange()">
       <option value="5">Batches of 5</option>
       <option value="8">Batches of 8</option>
       <option value="all">Full Class</option>
+      <option value="grid">Grid View</option>
     </select>
   </div>
 </header>
 
-<div class="card-container" onclick="handleCardClick()">
+<!-- Flashcard View -->
+<div class="card-container" id="cardContainer" onclick="handleCardClick()">
   <div class="loader-overlay" id="loaderOverlay">
     <div class="spinner"></div>
     <div class="loading-text" id="loaderText">Loading group data...</div>
@@ -77,7 +87,11 @@
   </div>
 </div>
 
-<div class="nav-btns">
+<!-- Standalone Grid View -->
+<div class="grid-container hidden" id="gridContainer"></div>
+
+<!-- Navigation Controls -->
+<div class="nav-btns" id="navBtns">
   <button onclick="prevBatch()">Previous Batch</button>
   <button onclick="nextBatch()">Next Batch</button>
 </div>
@@ -94,7 +108,6 @@
   let currentCardIdx = 0;
   let isRevealed = false;
   
-  // Image cache store to hold fully loaded HTML Image elements
   const imageCache = new Map();
 
   function parseFilename(filename) {
@@ -136,14 +149,24 @@
     }
   }
 
+  function handleGroupChange() {
+    imageCache.clear();
+    startSession();
+  }
+
   async function startSession() {
     let group = document.getElementById('groupSelect').value;
     if (!group) return;
 
-    // Reset state & UI
     isRevealed = false;
     document.getElementById('nameOverlay').classList.remove('visible');
     document.getElementById('studentImg').src = '';
+    
+    // Switch UI context to flashcards while fetching
+    document.getElementById('cardContainer').classList.remove('hidden');
+    document.getElementById('gridContainer').classList.add('hidden');
+    document.getElementById('navBtns').style.display = 'flex';
+    
     showLoader(`Fetching student list for ${group}...`, false);
 
     try {
@@ -156,21 +179,71 @@
         return { path: f.path, preferred: names.preferred, formal: names.formal };
       });
 
-      shuffle(rawStudents);
-      createBatches();
+      handleModeChange();
       
-      currentBatchIdx = 0;
-      currentCardIdx = 0;
-      
-      // Load active batch first before starting
-      await preloadActiveBatch();
-      
-      // Quietly preload the rest of the class images in the background
       preloadRemainingClass();
     } catch (err) {
       showLoader('Error loading set photos.', false);
       console.error(err);
     }
+  }
+
+  async function handleModeChange() {
+    let mode = document.getElementById('batchSizeSelect').value;
+
+    if (mode === 'grid') {
+      renderGridView();
+    } else {
+      document.getElementById('gridContainer').classList.add('hidden');
+      document.getElementById('cardContainer').classList.remove('hidden');
+      document.getElementById('navBtns').style.display = 'flex';
+
+      shuffle(rawStudents);
+      createBatches();
+
+      currentBatchIdx = 0;
+      currentCardIdx = 0;
+
+      await preloadActiveBatch();
+    }
+  }
+
+  function renderGridView() {
+    hideLoader();
+    document.getElementById('cardContainer').classList.add('hidden');
+    document.getElementById('navBtns').style.display = 'none';
+
+    let gridContainer = document.getElementById('gridContainer');
+    gridContainer.innerHTML = '';
+    gridContainer.classList.remove('hidden');
+
+    let sortedStudents = [...rawStudents].sort((a, b) => a.preferred.localeCompare(b.preferred));
+
+    for (let student of sortedStudents) {
+      let card = document.createElement('div');
+      card.className = 'grid-card';
+
+      let img = document.createElement('img');
+      img.src = student.path;
+      img.alt = student.preferred;
+
+      let prefName = document.createElement('div');
+      prefName.className = 'grid-pref-name';
+      prefName.innerText = student.preferred;
+
+      let formalName = document.createElement('div');
+      formalName.className = 'grid-formal-name';
+      formalName.innerText = student.formal ? `(${student.formal})` : '';
+
+      card.appendChild(img);
+      card.appendChild(prefName);
+      if (student.formal) card.appendChild(formalName);
+
+      gridContainer.appendChild(card);
+    }
+
+    let group = document.getElementById('groupSelect').value;
+    document.getElementById('statusText').innerText = `Grid View  |  ${rawStudents.length} Students (${group})`;
   }
 
   function createBatches() {
@@ -201,7 +274,6 @@
     }
   }
 
-  // Preloads an individual image and saves to cache
   function fetchImage(path) {
     if (imageCache.has(path)) return Promise.resolve(imageCache.get(path));
     
@@ -211,12 +283,11 @@
         imageCache.set(path, img);
         resolve(img);
       };
-      img.onerror = () => resolve(null); // Resolve gracefully on error
+      img.onerror = () => resolve(null);
       img.src = path;
     });
   }
 
-  // Preload current batch with progress bar
   async function preloadActiveBatch() {
     let currentBatch = batches[currentBatchIdx];
     if (!currentBatch || currentBatch.length === 0) return;
@@ -235,11 +306,10 @@
     renderCard();
   }
 
-  // Preload rest of class in background
   async function preloadRemainingClass() {
     for (let student of rawStudents) {
       if (!imageCache.has(student.path)) {
-        fetchImage(student.path); // Fire and forget
+        fetchImage(student.path);
       }
     }
   }
@@ -303,7 +373,6 @@
     currentBatchIdx = (currentBatchIdx + 1) % batches.length;
     currentCardIdx = 0;
     
-    // Ensure new batch is preloaded if background caching hasn't finished
     await preloadActiveBatch();
   }
 
